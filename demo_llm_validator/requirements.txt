@@ -6,3 +6,6 @@ business-rules
 
 # For creating interactive dropdowns
 ipywidgets
+
+# For making API calls to Ollama
+requests
