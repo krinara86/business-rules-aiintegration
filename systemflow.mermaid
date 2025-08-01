@@ -1,0 +1,30 @@
+---
+config:
+  layout: dagre
+---
+flowchart TD
+ subgraph subGraph0["LLM part"]
+    direction LR
+        D{"LLM Generates Text"}
+        C["Send to Ollama LLM"]
+        B{"Construct Prompt"}
+        A["User Enters Order"]
+  end
+ subgraph subGraph1["System Validation & Output"]
+    direction LR
+        F{"Run DSL Engine Calculation"}
+        E["Extract JSON from Text"]
+        G["Report Hallucination Error"]
+        I["Display Final Table"]
+        H{"Compare LLM vs. DSL"}
+  end
+    A --> B
+    B --> C
+    C --> D
+    E --> F & G
+    F --> H
+    H --> I
+    D --> E
+    style A fill:#DBEAFE,stroke:#1E40AF
+    style G fill:#FEE2E2,stroke:#991B1B
+    style I fill:#D1FAE5,stroke:#065F46
