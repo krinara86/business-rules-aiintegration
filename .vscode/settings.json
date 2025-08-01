@@ -1,0 +1,3 @@
+{
+    "python.defaultInterpreterPath": ".\\demo_llm_validator\\venv\\Scripts\\python.exe"
+}

@@ -1,0 +1,8 @@
+# For running the notebook
+jupyter
+
+# The business rules engine
+business-rules
+
+# For creating interactive dropdowns
+ipywidgets
