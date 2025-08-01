@@ -191,7 +191,7 @@ JSON Response:
 """
 ```
 
-![System Flow Diagram](systemflow.png)
+![System Flow Diagram](systemflow.jpg)
 
 1.  **LLM Processing:** The user's order is sent to the local Ollama LLM with the prompt above.
 2.  **JSON Extraction:** The system's code intelligently finds and parses the JSON block from the LLM's (potentially messy) text response.
