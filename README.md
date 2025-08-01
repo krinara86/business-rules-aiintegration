@@ -1,294 +1,199 @@
-business-rules
-==============
+# LLM Validation with a DSL - Demo
 
-As a software system grows in complexity and usage, it can become burdensome if
-every change to the logic/behavior of the system also requires you to write and
-deploy new code. The goal of this business rules engine is to provide a simple
-interface allowing anyone to capture new rules and logic defining the behavior
-of a system, and a way to then process those rules on the backend.
+This project demonstrates a system that uses a Domain-Specific Language (DSL) to validate and correct the output of a Large Language Model (LLM).
 
-You might, for example, find this is a useful way for analysts to define
-marketing logic around when certain customers or items are eligible for a
-discount or to automate emails after users enter a certain state or go through
-a particular sequence of events.
+The goal is to show how a rules engine can act as a safety net, enforcing business logic on the structured data extracted by an LLM from a natural language query. This ensures the final output is both intelligent and compliant.
 
-## Usage
+## The Rules Engine
 
-### 1. Define Your set of variables
+This demo is built using the open-source `business-rules` library for Python.
 
-Variables represent values in your system, usually the value of some particular object.  You create rules by setting threshold conditions such that when a variable is computed that triggers the condition some action is taken.
+* **Description:** It's a lightweight engine where rules are defined as data (JSON) and are completely separate from the execution code.
+* **Format:** Rules consist of `conditions` (the "if" part) and `actions` (the "then" part). Our demo uses the `actions` to define calculation formulas.
+* **Documentation:** For a full understanding of the library's capabilities, refer to the original repository: <https://github.com/venmo/business-rules>
 
-You define all the available variables for a certain kind of object in your code, and then later dynamically set the conditions and thresholds for those.
+---
 
-For example:
+## How to Use
 
-```python
-class ProductVariables(BaseVariables):
+### 1. Prerequisites: Install Ollama
 
-    def __init__(self, product):
-        self.product = product
+This demo uses a locally-run open-source LLM. You must have Ollama installed and have downloaded the Llama 3 8B model.
 
-    @numeric_rule_variable
-    def current_inventory(self):
-        return self.product.current_inventory
+1.  **Install Ollama:** Download from <https://ollama.com> and run the installer.
+2.  **Download the Model:** Open a terminal and run:
+    ```bash
+    ollama pull llama3:8b
+    ```
 
-    @numeric_rule_variable(label='Days until expiration')
-    def expiration_days(self)
-        last_order = self.product.orders[-1]
-        return (last_order.expiration_date - datetime.date.today()).days
+### 2. Setup the Python Environment
 
-    @string_rule_variable()
-    def current_month(self):
-        return datetime.datetime.now().strftime("%B")
+The demo runs inside a Jupyter Notebook. The following steps will set up the necessary Python environment.
 
-    @select_rule_variable(options=Products.top_holiday_items())
-    def goes_well_with(self):
-        return products.related_products
-```
+1.  **Navigate to the Demo Folder:**
+    ```bash
+    cd demo_llm_validator
+    ```
+2.  **Create a Virtual Environment:**
+    ```bash
+    python -m venv venv
+    ```
+3.  **Activate the Environment:**
+    * On Windows (PowerShell): `.\venv\Scripts\Activate.ps1`
+    * On Mac/Linux: `source venv/bin/activate`
+    *(Note: On PowerShell, you may first need to run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process`)*
 
-### 2. Define your set of actions
+4.  **Install Dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-These are the actions that are available to be taken when a condition is triggered.
+### 3. Run the Demo
 
-For example:
+1.  **Start the Jupyter Server:** In your active terminal, run:
+    ```bash
+    jupyter notebook
+    ```
+2.  **Open the Notebook:** A new tab will open in your browser. Click on `llm_validation_demo.ipynb`.
+3.  **Run the Cells:** Execute each cell in the notebook in order by selecting it and pressing `Shift + Enter`. The final cell will display the interactive demo UI.
 
-```python
-class ProductActions(BaseActions):
+---
 
-    def __init__(self, product):
-        self.product = product
+## Example Run-through: A Simple Tax Calculation System
 
-    @rule_action(params={"sale_percentage": FIELD_NUMERIC})
-    def put_on_sale(self, sale_percentage):
-        self.product.price = (1.0 - sale_percentage) * self.product.price
-        self.product.save()
+The demo uses the scenario of calculating a restaurant bill according to a specific set of tax rules. \
 
-    @rule_action(params={"number_to_order": FIELD_NUMERIC})
-    def order_more(self, number_to_order):
-        ProductOrder.objects.create(product_id=self.product.id,
-                                    quantity=number_to_order)
-```
 
-If you need a select field for an action parameter, another -more verbose- syntax is available:
+The "source of truth" for the calculation is defined in our rules. The logic is contained in the `actions`.
 
 ```python
-class ProductActions(BaseActions):
-
-    def __init__(self, product):
-        self.product = product
-
-    @rule_action(params=[{'fieldType': FIELD_SELECT,
-                          'name': 'stock_state',
-                          'label': 'Stock state',
-                          'options': [
-                            {'label': 'Available', 'name': 'available'},
-                            {'label': 'Last items', 'name': 'last_items'},
-                            {'label': 'Out of stock', 'name': 'out_of_stock'}
-                        ]}])
-    def change_stock_state(self, stock_state):
-        self.product.stock_state = stock_state
-        self.product.save()
-```
-
-### 3. Build the rules
-
-A rule is just a JSON object that gets interpreted by the business-rules engine.
-
-Note that the JSON is expected to be auto-generated by a UI, which makes it simple for anyone to set and tweak business rules without knowing anything about the code.  The javascript library used for generating these on the web can be found [here](https://github.com/venmo/business-rules-ui).
-
-An example of the resulting python lists/dicts is:
-
-```python
-rules = [
-# expiration_days < 5 AND current_inventory > 20
-{ "conditions": { "all": [
-      { "name": "expiration_days",
-        "operator": "less_than",
-        "value": 5,
-      },
-      { "name": "current_inventory",
-        "operator": "greater_than",
-        "value": 20,
-      },
-  ]},
-  "actions": [
-      { "name": "put_on_sale",
-        "params": {"sale_percentage": 0.25},
-      },
-  ],
-},
-
-# current_inventory < 5 OR (current_month = "December" AND current_inventory < 20)
-{ "conditions": { "any": [
-      { "name": "current_inventory",
-        "operator": "less_than",
-        "value": 5,
-      },
-    ]},
-      { "all": [
-        {  "name": "current_month",
-          "operator": "equal_to",
-          "value": "December",
-        },
-        { "name": "current_inventory",
-          "operator": "less_than",
-          "value": 20,
-        }
-      ]},
-  },
-  "actions": [
-    { "name": "order_more",
-      "params":{"number_to_order": 40},
+# From Cell 1 in the notebook
+tax_calculation_rules = [
+    {
+        "name": "Calculate Food Tax (7%)",
+        "conditions": { "all": [] },
+        "actions": [
+            {
+                "name": "calculate_tax_on_variable",
+                "params": {
+                    "input_variable_name": "net_food_cost",
+                    "tax_rate": 0.07,
+                    "output_variable_name": "food_tax"
+                }
+            }
+        ]
     },
-  ],
-}]
+    {
+        "name": "Calculate Drink Tax (19%)",
+        "conditions": { "all": [] },
+        "actions": [
+            {
+                "name": "calculate_tax_on_variable",
+                "params": {
+                    "input_variable_name": "net_drink_cost",
+                    "tax_rate": 0.19,
+                    "output_variable_name": "drink_tax"
+                }
+            }
+        ]
+    },
+    {
+        "name": "Calculate Final Bill",
+        "conditions": { "all": [] },
+        "actions": [
+            { "name": "calculate_total_bill" }
+        ]
+    }
+]
 ```
 
-### Export the available variables, operators and actions
+The rules defined in JSON are connected to the actual Python code through a API contract (`business-rules` extension point type thing).
 
-To e.g. send to your client so it knows how to build rules
+The library provides base classes (`BaseVariables`, `BaseActions`) and decorators (`@numeric_rule_variable`, `@rule_action`). These form the "contract" that our code must follow to be compatible with the rules engine.
+The `BillVariables` and `BillActions` classes in the notebook are our specific implementation of this contract.
+This `BillVariables` class implements the `BaseVariables` contract. Its purpose is to provide data to the engine. When a rule needs a value like `"net_food_cost"`, the engine looks for a method with the exact same name in this class.
+This class implements the `BaseActions` contract. Its purpose is to execute the logic when a rule is triggered.
 
-```python
-from business_rules import export_rule_data
-export_rule_data(ProductVariables, ProductActions)
+Let's look at the `"Calculate Food Tax (7%)"` rule's action:
+```json
+{
+    "name": "calculate_tax_on_variable",
+    "params": {
+        "input_variable_name": "net_food_cost",
+        "tax_rate": 0.07,
+        "output_variable_name": "food_tax"
+    }
+}
 ```
+* **`"name": "calculate_tax_on_variable"`**: This tells the engine to run the `calculate_tax_on_variable` method inside our `BillActions` class.
+* **`"params"`**: This is a dictionary of arguments passed to that method.
+    * **`"input_variable_name": "net_food_cost"`**: We pass the *name* of the variable as a string. Inside the Python method, we use this name to dynamically get the actual value (e.g., `30.00`) from the `BillVariables` class. This makes our `calculate_tax_on_variable` action reusable for both food and drinks.
+    * **`"tax_rate": 0.07`**: This is a direct value passed to the method.
+    * **`"output_variable_name": "food_tax"`**: We pass a string name to tell the method where to store the result of its calculation (e.g., `30.00 * 0.07 = 2.10`). The method stores this result in a dictionary like `{'food_tax': 2.10}`.
 
-that returns
+This structure powerfully separates the *what* (the logic in the JSON rules) from the *how* (the implementation in the Python code).
 
-```python
-{"variables": [
-    { "name": "expiration_days",
-      "label": "Days until expiration",
-      "field_type": "numeric",
-      "options": []},
-    { "name": "current_month",
-      "label": "Current Month",
-      "field_type": "string",
-      "options": []},
-    { "name": "goes_well_with",
-      "label": "Goes Well With",
-      "field_type": "select",
-      "options": ["Eggnog", "Cookies", "Beef Jerkey"]}
-                ],
-  "actions": [
-    { "name": "put_on_sale",
-      "label": "Put On Sale",
-      "params": {"sale_percentage": "numeric"}},
-    { "name": "order_more",
-      "label": "Order More",
-      "params": {"number_to_order": "numeric"}}
-  ],
-  "variable_type_operators": {
-    "numeric": [ {"name": "equal_to",
-                  "label": "Equal To",
-                  "input_type": "numeric"},
-                 {"name": "less_than",
-                  "label": "Less Than",
-                  "input_type": "numeric"},
-                 {"name": "greater_than",
-                  "label": "Greater Than",
-                  "input_type": "numeric"}],
-    "string": [ { "name": "equal_to",
-                  "label": "Equal To",
-                  "input_type": "text"},
-                { "name": "non_empty",
-                  "label": "Non Empty",
-                  "input_type": "none"}]
-  }
+### Adding New Rules (A High-Level Guide)
+
+Extending the system for a new domain involves two main steps: defining the new rules in the DSL, and implementing the corresponding logic in the Python classes.
+
+**Step 1: Define the New Rule in the DSL (The "What")**
+First, you define the new business logic by adding a new JSON object to the rules list. For example, to add a service tip, you would add this rule:
+
+```json
+{
+    "name": "Add Service Tip",
+    "conditions": { "all": [] },
+    "actions": [
+        {
+            "name": "add_tip_to_total",
+            "params": {
+                "tip_variable_name": "service_tip"
+            }
+        }
+    ]
 }
 ```
 
-### Run your rules
+**Step 2: Implement the Logic in Python (The "How")**
+Next, you implement the new variable (`service_tip`) and the new action (`add_tip_to_total`) in the Python classes so the engine knows how to execute the rule.
+
+1.  **Add the new variable** to the `BillVariables` class:
+    ```python
+    @numeric_rule_variable
+    def service_tip(self):
+        return self.data.get('service_tip', 0)
+    ```
+2.  **Add the new action** to the `BillActions` class:
+    ```python
+    @rule_action(params=[{'fieldType': 'text', 'name': 'tip_variable_name'}])
+    def add_tip_to_total(self, tip_variable_name):
+        tip_amount = getattr(self.variables, tip_variable_name)()
+        self.final_bill += tip_amount
+    ```
+
+### The LLM Prompt
+
+When the user enters an order, the system constructs a detailed prompt asking the LLM to both extract the base costs and attempt the full calculation.
 
 ```python
-from business_rules import run_all
+# From Cell 4 in the notebook
+prompt = f"""
+You are a restaurant billing assistant. Your tasks are:
+1. Extract the 'net_food_cost' and 'net_drink_cost' from the user's order.
+2. Attempt to calculate the 'total_tax' (food tax is 7%, drink tax is 19%).
+3. Attempt to calculate the 'final_bill'.
+4. Respond ONLY with a JSON object containing these four fields.
 
-rules = _some_function_to_receive_from_client()
+User Order: "{user_query}"
 
-for product in Products.objects.all():
-    run_all(rule_list=rules,
-            defined_variables=ProductVariables(product),
-            defined_actions=ProductActions(product),
-            stop_on_first_trigger=True
-           )
+JSON Response:
+"""
 ```
 
-## API
+![System Flow Diagram](systemflow.jpg)
 
-#### Variable Types and Decorators:
-
-The type represents the type of the value that will be returned for the variable and is necessary since there are different available comparison operators for different types, and the front-end that's generating the rules needs to know which operators are available.
-
-All decorators can optionally take a label:
-- `label` - A human-readable label to show on the frontend. By default we just split the variable name on underscores and capitalize the words.
-
-The available types and decorators are:
-
-**numeric** - an integer, float, or python Decimal.
-
-`@numeric_rule_variable` operators:
-
-* `equal_to`
-* `greater_than`
-* `less_than`
-* `greater_than_or_equal_to`
-* `less_than_or_equal_to`
-
-Note: to compare floating point equality we just check that the difference is less than some small epsilon
-
-**string** - a python bytestring or unicode string.
-
-`@string_rule_variable` operators:
-
-* `equal_to`
-* `starts_with`
-* `ends_with`
-* `contains`
-* `matches_regex`
-* `non_empty`
-
-**boolean** - a True or False value.
-
-`@boolean_rule_variable` operators:
-
-* `is_true`
-* `is_false`
-
-**select** - a set of values, where the threshold will be a single item.
-
-`@select_rule_variable` operators:
-
-* `contains`
-* `does_not_contain`
-
-**select_multiple** - a set of values, where the threshold will be a set of items.
-
-`@select_multiple_rule_variable` operators:
-
-* `contains_all`
-* `is_contained_by`
-* `shares_at_least_one_element_with`
-* `shares_exactly_one_element_with`
-* `shares_no_elements_with`
-
-### Returning data to your client
-
-
-
-## Contributing
-
-Open up a pull request, making sure to add tests for any new functionality. To set up the dev environment (assuming you're using [virtualenvwrapper](http://docs.python-guide.org/en/latest/dev/virtualenvs/#virtualenvwrapper)):
-
-```bash
-$ python -m virtualenv venv
-$ source ./venv/bin/activate
-$ pip install -r dev-requirements.txt -e .
-$ pytest
-```
-
-Alternatively, you can also use Tox:
-
-```bash
-$ pip install "tox<4"
-$ tox -p auto --skip-missing-interpreters
-```
+1.  **LLM Processing:** The user's order is sent to the local Ollama LLM with the prompt above.
+2.  **JSON Extraction:** The system's code intelligently finds and parses the JSON block from the LLM's (potentially messy) text response.
+3.  **DSL Engine Calculation:** The system uses the `BillActions` class to execute the formulas defined in our `tax_calculation_rules` on the data extracted by the LLM. This produces a separate, guaranteed-correct calculation.
+4.  **Comparison:** The final output is a table that shows a side-by-side comparison of the LLM's calculated values and the DSL-enforced values, with a status icon for each line item.
